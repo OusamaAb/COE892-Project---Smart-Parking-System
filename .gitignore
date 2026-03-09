@@ -1,0 +1,16 @@
+## Python / backend
+backend/venv/
+__pycache__/
+*.pyc
+
+## Node / frontend
+frontend/node_modules/
+frontend/dist/
+
+## Editor / OS
+.DS_Store
+*.log
+
+## Project docs that should NOT go to GitHub
+PROJECT_GUIDE.md
+
