@@ -8,6 +8,8 @@ This is the only service that exposes CORS for the browser.
 Port: 8000
 """
 
+import os
+
 import httpx
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,9 +22,15 @@ PRICING_URL     = "http://localhost:8004"
 
 app = FastAPI(title="Smart Parking Gateway", version="2.0.0")
 
+_cors_extra = os.getenv("GATEWAY_CORS_ORIGINS", "")
+_allow_origins = ["http://localhost:5173"]
+_allow_origins.extend(
+    o.strip() for o in _cors_extra.split(",") if o.strip()
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=_allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
