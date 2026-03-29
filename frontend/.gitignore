@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Keep local-only (not published)
+package-lock.json
+vite.config.js
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

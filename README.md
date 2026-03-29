@@ -30,6 +30,7 @@ Open a second terminal:
 
 ```bash
 cd smart-parking-system/frontend
+cp vite.config.example.js vite.config.js   # first clone only, if vite.config.js is missing
 npm install
 npm run dev
 ```
