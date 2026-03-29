@@ -36,3 +36,13 @@ npm run dev
 ```
 
 Open **http://localhost:5173** in your browser.
+
+## GitHub Pages (static frontend)
+
+Publishing **“from branch / root”** only serves files at the repo root (mostly `README.md`), not the Vite app. Use **GitHub Actions** instead:
+
+1. Repo **Settings → Pages → Build and deployment**: set **Source** to **GitHub Actions** (not “Deploy from a branch”).
+2. Push to `main` (or run the **Deploy frontend to GitHub Pages** workflow manually). The workflow builds `frontend/` and deploys `dist/`.
+3. Site URL: `https://<your-username>.github.io/COE892-Project---Smart-Parking-System/` (repo name must match your repository).
+
+The gateway is not on Pages. For a public demo, run the backend locally (or on a server) and expose it with HTTPS (e.g. a tunnel). Add a repository variable **`VITE_API_BASE_URL`** (Settings → Secrets and variables → Actions → Variables) with that gateway URL (no trailing slash), then rebuild Pages so the built JS points at it.
