@@ -36,8 +36,10 @@ jobs:
         env:
           VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
         run: |
+          # vite.config.js is gitignored locally; CI must use the committed example (includes @vitejs/plugin-react).
+          # Without it, Vite uses classic JSX → React.createElement without a React import → blank page + "React is not defined".
+          cp vite.config.example.js vite.config.js
           npm install
-          # Relative base avoids blank page when repo URL casing/path != github.event.repository.name
           npx vite build --base=./
 
       - uses: actions/upload-pages-artifact@v3
