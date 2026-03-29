@@ -11,8 +11,14 @@ const BASE_URL = "http://localhost:8000";
 
 /* ---------- Spots (enriched with price by the gateway) ---------- */
 
-export async function fetchSpots() {
-  const response = await axios.get(`${BASE_URL}/spots`);
+/**
+ * @param {number} extraOccupied 0 = rate from actual occupancy only;
+ *   1 = assume one more car for surge (preview before you take a spot).
+ */
+export async function fetchSpots(extraOccupied = 1) {
+  const response = await axios.get(`${BASE_URL}/spots`, {
+    params: { extra_occupied: extraOccupied },
+  });
   return response.data;
 }
 
@@ -59,6 +65,13 @@ export async function listReservations() {
 
 export async function fetchRate() {
   const response = await axios.get(`${BASE_URL}/pricing/rate`);
+  return response.data;
+}
+
+/* ---------- Lot clock (simulated session time) ---------- */
+
+export async function fetchLotClock() {
+  const response = await axios.get(`${BASE_URL}/lot-clock`);
   return response.data;
 }
 

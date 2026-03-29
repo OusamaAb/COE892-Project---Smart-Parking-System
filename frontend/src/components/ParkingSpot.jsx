@@ -45,7 +45,9 @@ function ParkingSpot({ spot, direction, highlighted, disabled, onClick }) {
       <span className="bay-label">{spot.label}</span>
 
       {isReserved ? (
-        <CarIcon />
+        <span className="parked-car-hitbox" data-parked-hitbox="true" aria-hidden>
+          <CarIcon />
+        </span>
       ) : isSensorOnly ? (
         <span className="bay-detecting">OCCUPIED</span>
       ) : (

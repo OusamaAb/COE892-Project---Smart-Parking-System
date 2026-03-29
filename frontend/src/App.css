@@ -91,6 +91,29 @@
   color: #facc15;
 }
 
+.lot-clock-stat {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  min-width: 7.5rem;
+}
+
+.lot-clock-stat strong {
+  color: #38bdf8;
+  font-variant-numeric: tabular-nums;
+}
+
+.lot-clock-hint {
+  font-size: 0.68rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.lot-leave-preview {
+  margin-top: 0.35rem;
+  text-align: center;
+}
+
 /* =========================================================================
    LOT SURFACE — the asphalt
    ========================================================================= */
@@ -274,6 +297,23 @@
   font-size: 0.7rem;
   font-weight: 600;
   color: rgba(34, 197, 94, 0.7);
+}
+
+/* ---- Parked car collision hitbox (matches drivable car footprint ~36×54) ----- */
+
+.parked-car-hitbox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  min-height: 54px;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+.parked-car-hitbox .car-svg {
+  width: 36px;
+  height: auto;
 }
 
 /* ---- Car SVG inside the bay -------------------------------------------- */

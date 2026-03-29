@@ -9,7 +9,7 @@ Port: 8000
 """
 
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -54,11 +54,22 @@ async def health():
 # Spots — enriches parking data with current price from pricing_service
 # ---------------------------------------------------------------------------
 @app.get("/spots")
-async def get_spots():
+async def get_spots(
+    extra_occupied: int = Query(
+        1,
+        ge=0,
+        le=100,
+        description="Extra cars assumed for surge preview (0=actual only, 1=next parker)",
+    ),
+):
     """Aggregate spots + pricing into a single response for the UI."""
     async with httpx.AsyncClient() as client:
         spots_res = await client.get(f"{PARKING_URL}/spots", timeout=5.0)
-        price_res = await client.get(f"{PRICING_URL}/rate", timeout=5.0)
+        price_res = await client.get(
+            f"{PRICING_URL}/rate",
+            params={"extra_occupied": extra_occupied},
+            timeout=5.0,
+        )
     spots = spots_res.json()
     rate_info = price_res.json()
     rate = rate_info["rate"]
@@ -140,7 +151,23 @@ async def release_reservation(res_id: int):
 # Pricing — proxy current rate
 # ---------------------------------------------------------------------------
 @app.get("/pricing/rate")
-async def get_rate():
+async def get_rate(
+    extra_occupied: int = Query(0, ge=0, le=100),
+):
     async with httpx.AsyncClient() as client:
-        res = await client.get(f"{PRICING_URL}/rate", timeout=5.0)
+        res = await client.get(
+            f"{PRICING_URL}/rate",
+            params={"extra_occupied": extra_occupied},
+            timeout=5.0,
+        )
+    return res.json()
+
+
+# ---------------------------------------------------------------------------
+# Lot clock (simulated time — session only, reservation service)
+# ---------------------------------------------------------------------------
+@app.get("/lot-clock")
+async def lot_clock():
+    async with httpx.AsyncClient() as client:
+        res = await client.get(f"{RESERVATION_URL}/lot-clock", timeout=5.0)
     return res.json()

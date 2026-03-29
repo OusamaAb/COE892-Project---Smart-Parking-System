@@ -21,6 +21,92 @@ const CAR_W = 36;
 const CAR_H = 54;
 const SPEED = 3;
 
+/** AABB overlap: car at (ax,ay) size CAR_W×CAR_H vs obstacle rect in lot coords */
+function carHitsObstacle(ax, ay, obs) {
+  const r = ax + CAR_W;
+  const b = ay + CAR_H;
+  return !(r <= obs.left || ax >= obs.right || b <= obs.top || ay >= obs.bottom);
+}
+
+/** Tight hitbox around each parked car SVG — not the whole bay (keeps aisles open) */
+function collectParkedObstacleRects(lot) {
+  const lotRect = lot.getBoundingClientRect();
+  const nodes = lot.querySelectorAll("[data-parked-hitbox]");
+  const out = [];
+  nodes.forEach((el) => {
+    const r = el.getBoundingClientRect();
+    out.push({
+      left: r.left - lotRect.left,
+      top: r.top - lotRect.top,
+      right: r.right - lotRect.left,
+      bottom: r.bottom - lotRect.top,
+    });
+  });
+  return out;
+}
+
+function collidesWithAnyParked(ax, ay, obstacles) {
+  return obstacles.some((o) => carHitsObstacle(ax, ay, o));
+}
+
+/**
+ * If (x,y) overlaps a parked car, try sliding along X or Y from (oldX, oldY).
+ */
+function resolveCarObstacleCollision(x, y, oldX, oldY, obstacles) {
+  if (!collidesWithAnyParked(x, y, obstacles)) return { x, y };
+  if (!collidesWithAnyParked(x, oldY, obstacles)) return { x, y: oldY };
+  if (!collidesWithAnyParked(oldX, y, obstacles)) return { x: oldX, y };
+  return { x: oldX, y: oldY };
+}
+
+/**
+ * Spawn on a driving lane (aisle), not lot-center — avoids overlapping
+ * a parked car in the middle column (e.g. A3). Picks (x,y) with no
+ * collision against reserved bays; car may be taller than the lane strip.
+ */
+function findSpawnOnStreet(lot) {
+  const lotW = lot.offsetWidth;
+  const lotH = lot.offsetHeight;
+  const lotRect = lot.getBoundingClientRect();
+  const obstacles = collectParkedObstacleRects(lot);
+  const lanes = lot.querySelectorAll(".driving-lane");
+
+  if (lanes.length === 0) {
+    return { x: Math.max(0, (lotW - CAR_W) / 2), y: 40 };
+  }
+
+  for (const lane of lanes) {
+    const lr = lane.getBoundingClientRect();
+    const laneLeft = lr.left - lotRect.left;
+    const laneTop = lr.top - lotRect.top;
+    const laneW = lr.width;
+    const laneH = lr.height;
+    const xMid = laneLeft + (laneW - CAR_W) / 2;
+
+    const xCandidates = [
+      xMid,
+      xMid - 14,
+      xMid + 14,
+      xMid - 28,
+      xMid + 28,
+    ].map((xc) => Math.max(0, Math.min(lotW - CAR_W, xc)));
+
+    const yStart = Math.max(0, Math.floor(laneTop - 12));
+    const yEnd = Math.min(lotH - CAR_H, Math.ceil(laneTop + laneH + 8));
+
+    for (const x0 of xCandidates) {
+      const x = Math.max(0, Math.min(lotW - CAR_W, x0));
+      for (let y = yStart; y <= yEnd; y += 2) {
+        if (!collidesWithAnyParked(x, y, obstacles)) {
+          return { x, y };
+        }
+      }
+    }
+  }
+
+  return { x: Math.max(0, (lotW - CAR_W) / 2), y: Math.max(0, Math.min(lotH - CAR_H, 40)) };
+}
+
 function DrivableCar({ lotRef, paused, onSensorChange, onPark, onCancel }) {
   const carRef = useRef(null);
   const posRef = useRef({ x: 0, y: 0 });
@@ -38,10 +124,26 @@ function DrivableCar({ lotRef, paused, onSensorChange, onPark, onCancel }) {
   useEffect(() => { pausedRef.current = paused; },           [paused]);
 
   useEffect(() => {
-    if (lotRef.current) {
-      const lotW = lotRef.current.offsetWidth;
-      posRef.current = { x: (lotW / 2) - (CAR_W / 2), y: 28 };
-    }
+    /* Wait two frames so bay/lane layout + parked hitboxes are measured */
+    let rafSpawnA = 0;
+    let rafSpawnB = 0;
+    rafSpawnA = requestAnimationFrame(() => {
+      rafSpawnA = 0;
+      rafSpawnB = requestAnimationFrame(() => {
+        rafSpawnB = 0;
+        const lot = lotRef.current;
+        const car = carRef.current;
+        if (lot && car) {
+          const pos = findSpawnOnStreet(lot);
+          posRef.current = pos;
+          rotRef.current = 180;
+          car.style.transform =
+            `translate(${pos.x}px, ${pos.y}px) rotate(180deg)`;
+          checkOverlap(pos.x, pos.y);
+        }
+        animId = requestAnimationFrame(tick);
+      });
+    });
 
     function onKeyDown(e) {
       if (pausedRef.current) return;
@@ -63,7 +165,7 @@ function DrivableCar({ lotRef, paused, onSensorChange, onPark, onCancel }) {
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
 
-    let animId;
+    let animId = 0;
 
     function tick() {
       if (!lotRef.current || !carRef.current) {
@@ -74,6 +176,8 @@ function DrivableCar({ lotRef, paused, onSensorChange, onPark, onCancel }) {
       if (!pausedRef.current) {
         const keys = keysRef.current;
         let { x, y } = posRef.current;
+        const oldX = x;
+        const oldY = y;
         let rot = rotRef.current;
         let moved = false;
 
@@ -87,6 +191,11 @@ function DrivableCar({ lotRef, paused, onSensorChange, onPark, onCancel }) {
         x = Math.max(0, Math.min(lotW - CAR_W, x));
         y = Math.max(0, Math.min(lotH - CAR_H, y));
 
+        const obstacles = collectParkedObstacleRects(lotRef.current);
+        const resolved = resolveCarObstacleCollision(x, y, oldX, oldY, obstacles);
+        x = resolved.x;
+        y = resolved.y;
+
         posRef.current = { x, y };
         rotRef.current = rot;
 
@@ -99,12 +208,12 @@ function DrivableCar({ lotRef, paused, onSensorChange, onPark, onCancel }) {
       animId = requestAnimationFrame(tick);
     }
 
-    animId = requestAnimationFrame(tick);
-
     return () => {
+      if (rafSpawnA) cancelAnimationFrame(rafSpawnA);
+      if (rafSpawnB) cancelAnimationFrame(rafSpawnB);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
-      cancelAnimationFrame(animId);
+      if (animId) cancelAnimationFrame(animId);
     };
   }, [lotRef]);
 

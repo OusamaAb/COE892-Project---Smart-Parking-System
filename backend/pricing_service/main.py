@@ -35,14 +35,22 @@ def _surge(ratio: float) -> float:
 
 
 @app.get("/rate")
-async def get_rate():
-    """Return current hourly rate and occupancy info."""
+async def get_rate(extra_occupied: int = 0):
+    """
+    Return hourly rate and occupancy info.
+
+    extra_occupied: pretend this many additional cars are in the lot when
+    computing surge (for “next parker” preview). Clamped so effective
+    count never exceeds total spaces.
+    """
     async with httpx.AsyncClient() as client:
         res = await client.get(f"{PARKING_URL}/spots", timeout=5.0)
     spots = res.json()
     total = len(spots)
     occupied = sum(1 for s in spots if s["status"] == "occupied")
-    ratio = occupied / total if total else 0
+    extra = max(0, int(extra_occupied))
+    effective = min(total, occupied + extra)
+    ratio = effective / total if total else 0
     multiplier = _surge(ratio)
     rate = round(BASE_RATE * multiplier, 2)
     return {
@@ -51,7 +59,9 @@ async def get_rate():
         "multiplier": multiplier,
         "occupancy": round(ratio, 3),
         "occupied": occupied,
+        "effective_occupied": effective,
         "total": total,
+        "extra_occupied": extra,
     }
 
 

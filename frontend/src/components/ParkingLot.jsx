@@ -17,6 +17,7 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   fetchSpots,
+  fetchLotClock,
   sendSensorEvent,
   createReservation,
   releaseReservation,
@@ -31,6 +32,18 @@ const SECTIONS = [
 ];
 const HOUR_OPTIONS = [1, 2, 3, 4, 5, 6, 8, 12, 24];
 
+/** Lot-time ISO (naive) + hours → "h:mm AM/PM" leave-by string */
+function leaveByFromLotIso(lotIso, hours) {
+  if (!lotIso || !hours) return "";
+  const d = new Date(lotIso.includes("T") ? lotIso : lotIso.replace(" ", "T"));
+  if (Number.isNaN(d.getTime())) return "";
+  const end = new Date(d.getTime() + hours * 3600000);
+  return end.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 function ParkingLot() {
   const [spots, setSpots] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -44,6 +57,7 @@ function ParkingLot() {
 
   const [releaseModal, setReleaseModal] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [lotClock, setLotClock] = useState(null);
 
   const lotRef = useRef(null);
 
@@ -54,9 +68,14 @@ function ParkingLot() {
 
   /* ---- Data loading ---------------------------------------------------- */
 
+  /** Backend already counts our car in a bay → use actual occupancy; else +1 preview */
+  function pricingExtraOccupied() {
+    return sensorOccupiedRef.current != null ? 0 : 1;
+  }
+
   const loadSpots = useCallback(async () => {
     try {
-      const data = await fetchSpots();
+      const data = await fetchSpots(pricingExtraOccupied());
       setSpots(data);
       setLoading(false);
     } catch (err) {
@@ -67,6 +86,22 @@ function ParkingLot() {
   }, []);
 
   useEffect(() => { loadSpots(); }, [loadSpots]);
+
+  /* Poll lot clock + spots so auto-expired cars disappear without refresh */
+  useEffect(() => {
+    async function poll() {
+      try {
+        const lc = await fetchLotClock();
+        setLotClock(lc);
+        await loadSpots();
+      } catch (e) {
+        console.error("lot-clock poll:", e);
+      }
+    }
+    poll();
+    const id = setInterval(poll, 8000);
+    return () => clearInterval(id);
+  }, [loadSpots]);
 
   /* ---- Helpers --------------------------------------------------------- */
 
@@ -100,7 +135,7 @@ function ParkingLot() {
 
       /* Car ENTERED a new spot */
       if (newSpotId !== null) {
-        const freshSpots = await fetchSpots();
+        const freshSpots = await fetchSpots(pricingExtraOccupied());
         setSpots(freshSpots);
         const spot = freshSpots.find((s) => s.id === newSpotId);
 
@@ -110,7 +145,7 @@ function ParkingLot() {
             await sendSensorEvent(newSpotId, "car_entered");
           } catch (e) { console.error("sensor car_entered failed:", e); }
 
-          const updatedSpots = await fetchSpots();
+          const updatedSpots = await fetchSpots(pricingExtraOccupied());
           setSpots(updatedSpots);
         }
       } else {
@@ -124,7 +159,7 @@ function ParkingLot() {
   /* ---- Park request (Space pressed while in a bay) -------------------- */
 
   async function handleParkRequest(spotId) {
-    const freshSpots = await fetchSpots();
+    const freshSpots = await fetchSpots(pricingExtraOccupied());
     setSpots(freshSpots);
     const spot = freshSpots.find((s) => s.id === spotId);
     if (!spot) return;
@@ -162,6 +197,7 @@ function ParkingLot() {
     setDrivingMode(true);
     setSensorSpotId(null);
     sensorOccupiedRef.current = null;
+    loadSpots();
   }
 
   async function handleDrivingCancel() {
@@ -250,6 +286,15 @@ function ParkingLot() {
         <div className="stat price-stat">
           <span>Rate <strong>${currentPrice.toFixed(2)}/hr</strong></span>
         </div>
+
+        {lotClock && (
+          <div className="stat lot-clock-stat" title="Simulated lot time (session only). Advances every minute.">
+            <span>Lot time <strong>{lotClock.display}</strong></span>
+            <span className="lot-clock-hint">
+              +{lotClock.sim_minutes_per_tick} min / {lotClock.real_seconds_per_tick}s
+            </span>
+          </div>
+        )}
 
         {!drivingMode ? (
           <button className="btn add-car-btn" onClick={handleAddCar} disabled={freeCount === 0}>
@@ -347,6 +392,12 @@ function ParkingLot() {
                 {" "}{releaseModal.reservation.hours}hr
                 {" "}@ ${releaseModal.reservation.rate}/hr
                 {" "}= ${releaseModal.reservation.total}
+                {releaseModal.reservation.ends_at_sim_display && (
+                  <>
+                    <br />
+                    Lot leave-by: <strong>{releaseModal.reservation.ends_at_sim_display}</strong>
+                  </>
+                )}
               </p>
             )}
             <p className="modal-hint">This will free the spot for others.</p>
@@ -371,6 +422,14 @@ function ParkingLot() {
             <p className="modal-price">
               Rate: <strong>${parkModal.price.toFixed(2)}/hr</strong>
             </p>
+
+            {lotClock?.iso && (
+              <p className="modal-hint lot-leave-preview">
+                If you confirm, leave by{" "}
+                <strong>{leaveByFromLotIso(lotClock.iso, selectedHours)}</strong>
+                {" "}lot time ({selectedHours}h from current lot time)
+              </p>
+            )}
 
             <p className="modal-subtitle">Select duration</p>
             <div className="hours-picker">

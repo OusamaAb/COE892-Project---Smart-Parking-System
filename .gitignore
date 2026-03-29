@@ -2,6 +2,8 @@
 backend/venv/
 __pycache__/
 *.pyc
+backend/parking_service/*.db
+backend/reservation_service/*.db
 
 ## Node / frontend
 frontend/node_modules/
@@ -11,6 +13,6 @@ frontend/dist/
 .DS_Store
 *.log
 
-## Project docs that should NOT go to GitHub
-PROJECT_GUIDE.md
+## Local / deployment docs (not published to GitHub)
+docs/
 
